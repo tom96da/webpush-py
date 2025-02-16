@@ -1,0 +1,8 @@
+{% extends "_layout.html" %}
+
+{% block content %}
+<h1>Welcome to the home page</h1>
+<label>
+    <input type="checkbox" id="push-subscribe-checkbox" {% if is_subscribed %}checked{% endif %}> Push Notifications
+</label>
+{% endblock %}
