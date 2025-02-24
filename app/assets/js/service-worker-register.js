@@ -1,4 +1,4 @@
-window.navigator.serviceWorker.register("/assets/js/service-worker.js").then(reg => {
+window.navigator.serviceWorker.register("/assets/js/service-worker.js", { scope: "/assets/js/" }).then(reg => {
   reg.addEventListener('updatefound', () => {
     const newWorker = reg.installing;
     newWorker.addEventListener('statechange', () => {

@@ -11,7 +11,13 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-async function registerPush() {
+async function getVapidPublicKey() {
+  const response = await fetch('/vapid-public-key');
+  const data = await response.json();
+  return data.publicKey;
+}
+
+async function subscribePush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     alert("Push messaging is not supported in your browser.");
     return;
@@ -20,49 +26,81 @@ async function registerPush() {
     await Notification.requestPermission();
   }
   try {
-    const reg = await navigator.serviceWorker.register("/assets/js/service-worker.js");
-    if (! reg.active) {
-      alert("Service worker is not active yet.");
+    const reg = await navigator.serviceWorker.register("/assets/js/service-worker.js", { scope: "/assets/js/" });
+    if (!reg.active) {
+      console.error("Service worker registration failed.");
       return;
     }
-    const applicationServerKey = urlBase64ToUint8Array("BDOpUfHEw7LFRJWhDxF5TW7SR-kiaOY-_6iFrVweY8rfmi9ySzjxSGWbbm-wwriXwAYWVX5808Pb2U2ApYXYKLc");
-    const sub = await reg.pushManager.subscribe({
+    const publicKey = await getVapidPublicKey();
+    const applicationServerKey = urlBase64ToUint8Array(publicKey);
+    const subscription = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: applicationServerKey
     });
     const id = "1412"; // Set a unique ID for each user
-    data = {"id": id, "subscription": sub.toJSON()};
+    const data = {"id": id, "subscription": subscription.toJSON()};
     await fetch(`/subscribe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data)
     });
-    console.log("Push subscription:");
+    console.log("Push subscription:" , subscription);
   } catch (e) {
     console.error(e);
   }
 }
 
-async function unregisterPush() {
-  const id = "1412"; // Set a unique ID for each user
-  await fetch(`/unsubscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({"id": id})
-  });
-  console.log("Push unsubscription:");
+async function unsubscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert("Push messaging is not supported in your browser.");
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/assets/js/");
+    if (!reg) {
+      console.error("Service worker registration not found.");
+      return;
+    }
+    const subscription = await reg.pushManager.getSubscription();
+    if (subscription) {
+      const id = "1412"; // Set a unique ID for each user
+      await subscription.unsubscribe();
+      await fetch(`/unsubscribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ "id": id, "subscription": subscription.toJSON() })
+      });
+      console.log("Push unsubscription:", subscription);
+    } else {
+      console.log("No subscription found.");
+    }
+  } catch (e) {
+    console.error(e);
+  }
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
   const checkbox = document.getElementById('push-subscribe-checkbox');
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/assets/js/");
+    if (reg) {
+      const subscription = await reg.pushManager.getSubscription();
+      if (subscription) {
+        checkbox.checked = true;
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+
   checkbox.addEventListener('change', function (event) {
     checkbox.disabled = true; // Prevent multiple subscriptions
     if (event.target.checked) {
       console.log("Checkbox checked:", event.target.checked);
-      registerPush().then(() => checkbox.disabled = false);
+      subscribePush().then(() => checkbox.disabled = false);
     } else {
       console.log("Checkbox unchecked:", event.target.checked);
-      unregisterPush().then(() => checkbox.disabled = false);
+      unsubscribePush().then(() => checkbox.disabled = false);
     }
   });
 });
